@@ -2725,10 +2725,9 @@ async function _sbPull(){
   }
 }
 
-var _sbSyncing = false; // flag pour bloquer push pendant sync realtime
 
 function _sbPushMeta(cid){
-  if(!_sb||!_SESSION||_sbSyncing) return;
+  if(!_sb||!_SESSION) return;
   var data = _clientMeta[cid]||null;
   if(!data) return;
   var cidSnap = cid;
@@ -2754,49 +2753,7 @@ function _sbPushVisites(cid){
 
 // Supabase géré directement dans saveClientPopup, saveSvNote, resetClientMeta, _saveState
 
-function _sbSubscribe(){
-  if(!_sb) return;
-  _sbChan = _sb.channel('dash_rt_v2')
-    // Écouter modifications clientMeta
-    .on('postgres_changes',{event:'*',schema:'public',table:'dash_client_meta'},
-      function(payload){
-        var row = payload.new||payload.old;
-        if(!row||!row.client_id) return;
-        _sbSyncing = true; // bloquer push pendant sync
-        if(payload.eventType==='DELETE'){
-          delete _clientMeta[row.client_id];
-        } else if(row.data){
-          _clientMeta[row.client_id] = row.data;
-        }
-        try{localStorage.setItem('uv_cm',JSON.stringify(_clientMeta));}catch(e){}
-        _refreshAllViews();
-        _showSyncToast('🔄 Client mis à jour');
-        setTimeout(function(){_sbSyncing=false;},500); // réactiver après render
-      })
-    // Écouter modifications listes
-    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'dash_listes',filter:'id=eq.main'},
-      function(payload){
-        if(!payload.new||!payload.new.data) return;
-        _lists = payload.new.data;
-        try{localStorage.setItem('uv_l',JSON.stringify(_lists));}catch(e){}
-        _renderSidebar(); _updateBadge();
-        _showSyncToast('🔄 Listes mises à jour');
-      })
-    // Écouter modifications visites
-    .on('postgres_changes',{event:'*',schema:'public',table:'dash_visites'},
-      function(payload){
-        var row = payload.new||payload.old;
-        if(!row||!row.client_id) return;
-        if(payload.eventType==='DELETE'){
-          delete _visited[row.client_id];
-        } else if(row.data){
-          _visited[row.client_id] = row.data;
-        }
-        try{localStorage.setItem('uv_v',JSON.stringify(_visited));}catch(e){}
-        _renderMain();
-      })
-    .subscribe();
-}
+function _sbSubscribe(){ /* realtime désactivé */ }
 
 // Supabase push géré directement dans les fonctions métier
 
