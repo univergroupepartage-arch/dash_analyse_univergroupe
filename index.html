@@ -2725,15 +2725,17 @@ async function _sbPull(){
   }
 }
 
+var _sbSyncing = false; // flag pour bloquer push pendant sync realtime
+
 function _sbPushMeta(cid){
-  if(!_sb||!_SESSION) return;
+  if(!_sb||!_SESSION||_sbSyncing) return;
   var data = _clientMeta[cid]||null;
   if(!data) return;
-  var cidCopy = cid; // capture locale pour le callback
-  _sb.from('dash_client_meta').upsert({client_id:cidCopy, data:data, updated_at:new Date().toISOString()})
+  var cidSnap = cid;
+  _sb.from('dash_client_meta').upsert({client_id:cidSnap, data:data, updated_at:new Date().toISOString()})
     .then(function(res){
       if(res.error) _showSyncToast('❌ Erreur sync: '+res.error.message);
-      else _showSyncToast('✅ Sync Supabase OK — '+cidCopy);
+      else _showSyncToast('✅ Sync Supabase OK — '+cidSnap);
     })
     .catch(function(e){_showSyncToast('❌ Push échoué: '+e.message);});
 }
@@ -2760,6 +2762,7 @@ function _sbSubscribe(){
       function(payload){
         var row = payload.new||payload.old;
         if(!row||!row.client_id) return;
+        _sbSyncing = true; // bloquer push pendant sync
         if(payload.eventType==='DELETE'){
           delete _clientMeta[row.client_id];
         } else if(row.data){
@@ -2768,6 +2771,7 @@ function _sbSubscribe(){
         try{localStorage.setItem('uv_cm',JSON.stringify(_clientMeta));}catch(e){}
         _refreshAllViews();
         _showSyncToast('🔄 Client mis à jour');
+        setTimeout(function(){_sbSyncing=false;},500); // réactiver après render
       })
     // Écouter modifications listes
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'dash_listes',filter:'id=eq.main'},
