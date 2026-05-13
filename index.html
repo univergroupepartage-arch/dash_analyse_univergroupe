@@ -2799,17 +2799,19 @@ function _sbSubscribe(){
 var _orig_sv = _saveState;
 var _orig_cm = _saveClientMeta;
 var _orig_ca = _saveCA;
-var _lastModifiedCid = null; // tracker le dernier client modifié
+var _lastModifiedCid = null;
 _saveState      = function(){ _orig_sv(); if(_sb&&_SESSION) setTimeout(_sbPushListes,300); };
 _saveClientMeta = function(){
   _orig_cm();
   if(_sb&&_SESSION){
     var cid = _lastModifiedCid || _cpCurrentId;
-    if(cid) setTimeout(function(){ _sbPushMeta(cid); }, 300);
-    else setTimeout(_sbPush, 300); // fallback
+    if(cid){
+      var cidSnap = cid; // capture immédiate
+      setTimeout(function(){ _sbPushMeta(cidSnap); _lastModifiedCid=null; }, 300);
+    }
   }
 };
-_saveCA         = function(){ _orig_ca(); };
+_saveCA = function(){ _orig_ca(); };
 
 // ════════════════════════════════════════════════════════════
 // INIT — focus au chargement (render bloqué jusqu'au login)
