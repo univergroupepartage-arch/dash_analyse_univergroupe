@@ -911,7 +911,7 @@ function prioLabel(p){const icons={P1:'🔴',P2:'🟠',P3:'🟡',P4:'🟢'};retu
 function _nk(n){return Math.round(n||0).toLocaleString('fr-MA')+' MAD';}
 function _pct(r,o){if(!o)return 0;return Math.round(r/o*100);}
 function _isFige(id){return !!(_clientMeta[id]&&_clientMeta[id].fige);}
-function _saveState(){try{localStorage.setItem('uv_v',JSON.stringify(_visited));}catch(e){}try{localStorage.setItem('uv_l',JSON.stringify(_lists));}catch(e){}  }
+function _saveState(){try{localStorage.setItem('uv_v',JSON.stringify(_visited));}catch(e){}try{localStorage.setItem('uv_l',JSON.stringify(_lists));}catch(e){} if(_sb&&_SESSION) _sbPushListes(); }
 function _saveClientMeta(){try{localStorage.setItem('uv_cm',JSON.stringify(_clientMeta));}catch(e){}}
 function _saveCA(){try{localStorage.setItem('uv_ca',JSON.stringify(CA_REALISE));}catch(e){}}
 function _showSyncToast(msg){var t=document.getElementById('syncToast');if(!t)return;t.textContent=msg||'🔄 Synchronisé';t.style.display='block';setTimeout(function(){t.style.display='none';},2500);}
@@ -1798,8 +1798,9 @@ function saveClientPopup(){
 
   // Sauvegarder — type/cadence/resp/note = dernière entrée, fige conservé
   _clientMeta[_cpCurrentId]={type:t, cadence:cad, resp:respArr, note:note, fige:fige, history:history};
-  _lastModifiedCid = _cpCurrentId;
+  var _pushCid = _cpCurrentId;
   _saveClientMeta();
+  if(_sb&&_SESSION&&_pushCid) _sbPushMeta(_pushCid);
 
   // Vider les champs (popup reste ouvert)
   ['cpProsp','cpRelance','cpSpecial'].forEach(function(bid){
@@ -1845,6 +1846,9 @@ function resetClientMeta(id){
   if(!confirm('Réinitialiser le suivi de "'+nom+'" ?\nToutes les données (type, cadence, responsables, note) seront effacées.')) return;
   delete _clientMeta[id];
   _saveClientMeta();
+  if(_sb&&_SESSION){
+    _sb.from('dash_client_meta').delete().eq('client_id',id).then(function(){}).catch(function(){});
+  }
   _refreshAllViews();
 }
 function unfige(id){if(_clientMeta[id])_clientMeta[id].fige=false;_saveClientMeta();updateTable();}
@@ -2286,7 +2290,9 @@ function saveSvNote(){
     text:txt,
     by:_SESSION?_SESSION.nom:''
   });
+  var _svCid = _svNoteCid;
   _saveClientMeta();
+  if(_sb&&_SESSION&&_svCid) _sbPushMeta(_svCid);
   document.getElementById('svNoteInput').value='';
   _renderSvNotes();
   _renderMain(); // rafraîchir badge dans le tableau
@@ -2744,14 +2750,7 @@ function _sbPushVisites(cid){
   _sb.from('dash_visites').upsert({client_id:cid, data:data, updated_at:new Date().toISOString()}).then(function(){}).catch(function(){});
 }
 
-// Push global — appelé par les monkey-patches
-function _sbPush(){
-  if(!_sb||!_SESSION) return;
-  // Push toutes les métadonnées modifiées
-  Object.keys(_clientMeta).forEach(function(cid){ _sbPushMeta(cid); });
-  _sbPushListes();
-  Object.keys(_visited).forEach(function(cid){ _sbPushVisites(cid); });
-}
+// Supabase géré directement dans saveClientPopup, saveSvNote, resetClientMeta, _saveState
 
 function _sbSubscribe(){
   if(!_sb) return;
@@ -2795,23 +2794,7 @@ function _sbSubscribe(){
     .subscribe();
 }
 
-// Monkey-patch saves → push Supabase (uniquement le client modifié)
-var _orig_sv = _saveState;
-var _orig_cm = _saveClientMeta;
-var _orig_ca = _saveCA;
-var _lastModifiedCid = null;
-_saveState      = function(){ _orig_sv(); if(_sb&&_SESSION) setTimeout(_sbPushListes,300); };
-_saveClientMeta = function(){
-  _orig_cm();
-  if(_sb&&_SESSION){
-    var cid = _lastModifiedCid || _cpCurrentId;
-    if(cid){
-      var cidSnap = cid; // capture immédiate
-      setTimeout(function(){ _sbPushMeta(cidSnap); _lastModifiedCid=null; }, 300);
-    }
-  }
-};
-_saveCA = function(){ _orig_ca(); };
+// Supabase push géré directement dans les fonctions métier
 
 // ════════════════════════════════════════════════════════════
 // INIT — focus au chargement (render bloqué jusqu'au login)
