@@ -1915,7 +1915,7 @@ function creerListesPersonnalisees(){
 // ════════════════════════════════════════════════════════════
 // SUIVI VISITES MODAL
 // ════════════════════════════════════════════════════════════
-function _updateBadge(){var t=0,v=0;Object.values(_lists).forEach(l=>l.clients.forEach(c=>{t++;if(_visited[c.id])v++;}));var b=document.getElementById('suiviBadge');if(b)b.textContent=t>0?v+'/'+t:'';}
+function _updateBadge(){var t=0,v=0;Object.values(_lists).forEach(function(l){if(!l||!l.clients)return;l.clients.forEach(function(c){t++;if(_visited[c.id])v++;});});var b=document.getElementById('suiviBadge');if(b)b.textContent=t>0?v+'/'+t:'';}
 function _sortedKeys(){return Object.keys(_lists).sort((a,b)=>(_lists[b].ts||0)-(_lists[a].ts||0));}
 function openSuiviModal(){
   _pending={};var keys=_sortedKeys();
@@ -2507,7 +2507,7 @@ var _sb = null;
 var _sbChan = null;
 (function(){
   try{
-    if(SB_URL.indexOf('VOTRE')===-1 && window.supabase){
+    if(SB_URL.indexOf('VOTRE')===-1 && window.supabase && window.location.protocol !== 'file:'){
       _sb = window.supabase.createClient(SB_URL, SB_KEY);
     }
   }catch(e){}
@@ -2701,23 +2701,23 @@ function _applyAgenceFilter(agence){
 
 async function _sbPull(){
   if(!_sb) return;
-  // 1. clientMeta — toutes les lignes — ÉCRASE le localStorage
+  // 1. clientMeta — fusionner avec localStorage (Supabase a priorité si données présentes)
   var r1 = await _sb.from('dash_client_meta').select('client_id,data');
-  if(r1.data && r1.data.length){
+  if(r1.data && r1.data.length > 0){
     r1.data.forEach(function(row){
       if(row.client_id && row.data) _clientMeta[row.client_id] = row.data;
     });
     try{localStorage.setItem('uv_cm',JSON.stringify(_clientMeta));}catch(e){}
   }
-  // 2. listes
+  // 2. listes — seulement si Supabase a des données
   var r2 = await _sb.from('dash_listes').select('id,data').eq('id','main').maybeSingle();
-  if(r2.data && r2.data.data){
+  if(r2.data && r2.data.data && Object.keys(r2.data.data).length > 0){
     _lists = r2.data.data;
     try{localStorage.setItem('uv_l',JSON.stringify(_lists));}catch(e){}
   }
-  // 3. visites
+  // 3. visites — fusionner
   var r3 = await _sb.from('dash_visites').select('client_id,data');
-  if(r3.data && r3.data.length){
+  if(r3.data && r3.data.length > 0){
     r3.data.forEach(function(row){
       if(row.client_id && row.data) _visited[row.client_id] = row.data;
     });
@@ -2760,16 +2760,9 @@ function _sbSubscribe(){ /* realtime désactivé */ }
 // ════════════════════════════════════════════════════════════
 // INIT — focus au chargement (render bloqué jusqu'au login)
 // ════════════════════════════════════════════════════════════
-// Pré-charger les données Supabase dès le chargement de la page
-// (avant même le login) pour que localStorage soit à jour
+// INIT — focus au chargement (render bloqué jusqu'au login)
+// Les données Supabase sont chargées uniquement au login via _sbPull()
 setTimeout(function(){
-  if(_sb){
-    _sbPull().then(function(){
-      console.log('Supabase pré-chargé ✅');
-    }).catch(function(e){
-      console.warn('Pré-chargement Supabase échoué:', e);
-    });
-  }
   var el = document.getElementById('loginUser');
   if(el) el.focus();
 }, 80);
