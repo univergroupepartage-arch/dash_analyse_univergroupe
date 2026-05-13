@@ -1798,6 +1798,7 @@ function saveClientPopup(){
 
   // Sauvegarder — type/cadence/resp/note = dernière entrée, fige conservé
   _clientMeta[_cpCurrentId]={type:t, cadence:cad, resp:respArr, note:note, fige:fige, history:history};
+  _lastModifiedCid = _cpCurrentId;
   _saveClientMeta();
 
   // Vider les champs (popup reste ouvert)
@@ -2722,10 +2723,11 @@ function _sbPushMeta(cid){
   if(!_sb||!_SESSION) return;
   var data = _clientMeta[cid]||null;
   if(!data) return;
-  _sb.from('dash_client_meta').upsert({client_id:cid, data:data, updated_at:new Date().toISOString()})
+  var cidCopy = cid; // capture locale pour le callback
+  _sb.from('dash_client_meta').upsert({client_id:cidCopy, data:data, updated_at:new Date().toISOString()})
     .then(function(res){
       if(res.error) _showSyncToast('❌ Erreur sync: '+res.error.message);
-      else _showSyncToast('✅ Sync Supabase OK — '+cid);
+      else _showSyncToast('✅ Sync Supabase OK — '+cidCopy);
     })
     .catch(function(e){_showSyncToast('❌ Push échoué: '+e.message);});
 }
@@ -2793,13 +2795,21 @@ function _sbSubscribe(){
     .subscribe();
 }
 
-// Monkey-patch saves → push Supabase
+// Monkey-patch saves → push Supabase (uniquement le client modifié)
 var _orig_sv = _saveState;
 var _orig_cm = _saveClientMeta;
 var _orig_ca = _saveCA;
+var _lastModifiedCid = null; // tracker le dernier client modifié
 _saveState      = function(){ _orig_sv(); if(_sb&&_SESSION) setTimeout(_sbPushListes,300); };
-_saveClientMeta = function(){ _orig_cm(); if(_sb&&_SESSION) setTimeout(_sbPush,300); };
-_saveCA         = function(){ _orig_ca(); }; // CA non persisté Supabase (fichiers Excel)
+_saveClientMeta = function(){
+  _orig_cm();
+  if(_sb&&_SESSION){
+    var cid = _lastModifiedCid || _cpCurrentId;
+    if(cid) setTimeout(function(){ _sbPushMeta(cid); }, 300);
+    else setTimeout(_sbPush, 300); // fallback
+  }
+};
+_saveCA         = function(){ _orig_ca(); };
 
 // ════════════════════════════════════════════════════════════
 // INIT — focus au chargement (render bloqué jusqu'au login)
